@@ -1,0 +1,121 @@
+---
+
+version: "3.1"
+
+services:
+  s3-data:
+    image: scality/s3server
+    ports:
+      - "9991"
+    networks:
+      - backend
+    environment:
+      S3DATAPATH: /data
+      LISTEN_ADDR: 0.0.0.0
+    volumes:
+      - "s3-data:/data:rw"
+    command: npm run start_dataserver
+    deploy:
+      placement:
+        constraints:
+          - node.labels.io.zenko.type == storage
+
+  s3-metadata:
+    image: vrancurel/zenko-memcached-module
+    ports:
+      - "9990"
+    networks:
+      - backend
+    depends_on:
+      - memcached
+    environment:
+      S3METADATAPATH: /metadata
+      LISTEN_ADDR: 0.0.0.0
+    command: npm start
+    deploy:
+      placement:
+        constraints:
+          - node.labels.io.zenko.type == storage
+
+  memcached:
+    image: library/memcached
+    ports:
+      - "11211:11211"
+    environment:
+      EXTRA_OPTIONS: "-I 10m"
+    networks:
+      - backend
+    deploy:
+      mode: replicated
+      update_config:
+        parallelism: 1
+        delay: "10s"
+        monitor: "5s"
+      placement:
+        constraints:
+          - node.labels.io.zenko.type == storage
+
+  s3-front:
+    image: scality/s3server
+    ports:
+      - "8000"
+    networks:
+      - backend
+      - frontend-dmz
+    environment:
+      DATA_HOST: s3-data
+      METADATA_HOST: s3-metadata
+      REDIS_HOST: cache
+      ENDPOINT: "${ENDPOINT:-zenko}"
+    secrets:
+      - s3-credentials
+    command: npm run start_s3server
+    depends_on:
+      - s3-data
+      - s3-metadata
+      - cache
+    deploy:
+      mode: replicated
+      update_config:
+        parallelism: 1
+        delay: "10s"
+        monitor: "5s"
+
+  cache:
+    image: redis:alpine
+    ports:
+      - "6379"
+    networks:
+      - backend
+
+  lb:
+    image: zenko/loadbalancer
+    ports:
+      - "80:80"
+    environment:
+      LISTEN_PORT: 80
+      UPSTREAM_SERVER: "s3-front:8000"
+    networks:
+      - frontend
+      - frontend-dmz
+    depends_on:
+      - s3-front
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 1
+        delay: "10s"
+        monitor: "5s"
+
+networks:
+  backend:
+  frontend:
+  frontend-dmz:
+
+volumes:
+  s3-data:
+  s3-metadata:
+
+secrets:
+  s3-credentials:
+    file: ./secrets.txt
