@@ -1,28 +1,28 @@
 'use strict'; // eslint-disable-line strict
 
 const arsenal = require('arsenal');
+const werelogs = require('werelogs');
 const Memcached = require('memcached');
 
 const logOptions = {
-    "logLevel": "info",
+    "logLevel": "debug",
     "dumpLevel": "error"
 };
 
-const Logger = require('werelogs').Logger;
-
-const logging = new Logger('Zenko-Memcached', logOptions);
-const logger = logging.newRequestLogger();
+const logger = new werelogs.Logger('Zenko-Memcached');
 
 const MetadataFileServer =
-    arsenal.storage.metadata.MetadataFileServer;
+          require('arsenal').storage.metadata.MetadataFileServer;
 
 const mdServer = new MetadataFileServer(
-    { bindAddress: process.env.BIND_ADDRESS ? process.env.BIND_ADDRESS : 'localhost',
-      port: process.env.PORT ? process.env.PORT : 9990,
-      log: logOptions,
+    { bindAddress: '0.0.0.0',
+      port: 9990,
       path: '/tmp',
-      versioning: { replicationGroupId: 'dummy' } 
-      });
+      restEnabled: false,
+      restPort: 9999,
+      recordLog: { enabled: false, recordLogName: 's3-recordlog' },
+      versioning: { replicationGroupId: 'RG001' },
+      log: logOptions });
 
 var memcached = new Memcached('localhost:11211', {retries:10,retry:10000,remove:true,failOverServers:['192.168.0.103:11211']});
 
@@ -35,7 +35,7 @@ class MemcachedService extends arsenal.network.rpc.BaseService {
 mdServer.initMetadataService = function ()
 {
     const dbService = new MemcachedService({
-	namespace: '/dummy',
+	namespace: '/MDFile/metadata',
 	logger: logger
     });
     this.services.push(dbService);
@@ -50,6 +50,9 @@ mdServer.initMetadataService = function ()
         get: (env, key, options, cb) => {
 	    console.log('get');
         },
+	getDiskUsage: (env, cb) => {
+	    console.log('getDiskUsage');
+	},
     });
     dbService.registerSyncAPI({
         createReadStream:
@@ -59,7 +62,9 @@ mdServer.initMetadataService = function ()
         getUUID: () => this.readUUID(),
     });
     
-    console.log('Zenko Memcached Plugin Initialized');
+    console.log('Hooks installed');
 }
 
 mdServer.startServer();
+
+console.log('Zenko Memcached Plugin Initialized');
