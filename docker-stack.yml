@@ -3,32 +3,17 @@
 version: "3.1"
 
 services:
-  s3-data:
-    image: scality/s3server
-    ports:
-      - "9991"
-    networks:
-      - backend
-    environment:
-      S3DATAPATH: /data
-      LISTEN_ADDR: 0.0.0.0
-    volumes:
-      - "s3-data:/data:rw"
-    command: npm run start_dataserver
-    deploy:
-      placement:
-        constraints:
-          - node.labels.io.zenko.type == storage
-
-  s3-metadata:
+  s3-dmd:
     image: vrancurel/zenko-memcached-module
     ports:
       - "9990"
+      - "9991"
     networks:
       - backend
     depends_on:
       - memcached
     environment:
+      S3DATAPATH: /data
       S3METADATAPATH: /metadata
       LISTEN_ADDR: 0.0.0.0
     command: npm start
@@ -63,16 +48,15 @@ services:
       - backend
       - frontend-dmz
     environment:
-      DATA_HOST: s3-data
-      METADATA_HOST: s3-metadata
+      DATA_HOST: s3-dmd
+      METADATA_HOST: s3-dmd
       REDIS_HOST: cache
       ENDPOINT: "${ENDPOINT:-zenko}"
     secrets:
       - s3-credentials
     command: npm run start_s3server
     depends_on:
-      - s3-data
-      - s3-metadata
+      - s3-dmd
       - cache
     deploy:
       mode: replicated
@@ -111,10 +95,6 @@ networks:
   backend:
   frontend:
   frontend-dmz:
-
-volumes:
-  s3-data:
-  s3-metadata:
 
 secrets:
   s3-credentials:

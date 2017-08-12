@@ -1,6 +1,8 @@
 # zenko-memcached-module
 Zenko Memcached Module
 
+Overrides Dmd/Data and Dmd/Metadata
+
 To generate the docker image do:
 
 ```
