@@ -4,6 +4,7 @@ const arsenal = require('arsenal');
 const werelogs = require('werelogs');
 const Memcached = require('memcached');
 
+const SUBLEVEL_SEP = '::';
 const MEMCACHED_LIFETIME = 100000;
 
 const logOptions = {
