@@ -31,8 +31,9 @@
     "eslint-plugin-react": "4.2.3"
   },
   "dependencies": {
-    "memcached": "~2.2.2",
     "arsenal": "scality/Arsenal",
+    "memcached": "~2.2.2",
+    "stream-array": "^1.1.2",
     "werelogs": "scality/werelogs"
   }
 }

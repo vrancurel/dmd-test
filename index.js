@@ -3,6 +3,7 @@
 const arsenal = require('arsenal');
 const werelogs = require('werelogs');
 const Memcached = require('memcached');
+const StreamArray = require('stream-array');
 
 const SUBLEVEL_SEP = '::';
 const MEMCACHED_LIFETIME = 100000;
@@ -29,7 +30,9 @@ const mdServer = new MetadataFileServer(
       versioning: { replicationGroupId: 'RG001' },
       log: logOptions });
 
-var memcached = new Memcached('localhost:11211', {retries:10,retry:10000,remove:true,failOverServers:['192.168.0.103:11211']});
+var memcached_host = process.env.MEMCACHED_HOST ? process.env.MEMCACHED_HOST : 'localhost';
+
+var memcached = new Memcached(`${memcached_host}:11211`, {retries:10,retry:10000,remove:true,failOverServers:['192.168.0.103:11211']});
 
 class MemcachedService extends arsenal.network.rpc.BaseService {
     constructor(params) {
@@ -53,10 +56,12 @@ mdServer.initMetadataService = function ()
     dbService.registerAsyncAPI({
         put: (env, key, value, options, cb) => {
 	    const dbName = env.subLevel.join(SUBLEVEL_SEP);
-	    console.log('put',env,dbName,key,value,options);
-/*	    memcached.get(dbName, (err, data) => {
+	    console.log('put', dbName, key, value, options);
+	    memcached.get(dbName, (err, data) => {
 		if (err) {
 		    console.log(err);
+		    cb(err);
+		} else if (data === undefined) {
 		    let db = {};
 		    db[key] = value;
 		    memcached.add(dbName, JSON.stringify(db), MEMCACHED_LIFETIME, 
@@ -82,23 +87,25 @@ mdServer.initMetadataService = function ()
 					  }
 				      });
 		}
-	    });*/
+	    });
         },
         del: (env, key, options, cb) => {
-	    console.log('del',env,key,options);
+	    const dbName = env.subLevel.join(SUBLEVEL_SEP);
+	    console.log('del', dbName, key, options);
         },
         get: (env, key, options, cb) => {
-	    console.log('get',key,options);
-/*	    memcached.get(dbName, (err, data) => {
+	    const dbName = env.subLevel.join(SUBLEVEL_SEP);
+	    console.log('get', dbName, key, options);
+	    memcached.get(dbName, (err, data) => {
 		if (err) {
 		    console.log(err);
+		    cb(err);
 		} else {
-		    console.log(data);
+		    console.log('get', data);
 		    let db = JSON.parse(data);
 		    cb(null, db[key])
 		}
 	    });
-*/
         },
 	getDiskUsage: (env, cb) => {
 	    console.log('getDiskUsage',env);
@@ -107,7 +114,23 @@ mdServer.initMetadataService = function ()
     dbService.registerSyncAPI({
         createReadStream:
         (env, options) => {
-	    console.log('createReadStream');
+	    const dbName = env.subLevel.join(SUBLEVEL_SEP);
+	    console.log('createReadStream', dbName, options);
+	    memcached.get(dbName, (err, data) => {
+		if (err) {
+		    console.log(err);
+		    return undefined;
+		} else {
+		    console.log('createReadStream', data);
+		    if (data === undefined) {
+			return null;
+		    } else {
+			let db = JSON.parse(data);
+			const stream = StreamArray.create(db);
+			return stream;
+		    }
+		}
+	    });
 	},
         getUUID: () => this.readUUID(),
     });
