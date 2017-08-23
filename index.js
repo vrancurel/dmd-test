@@ -122,13 +122,29 @@ mdServer.initMetadataService = function ()
 		    return undefined;
 		} else {
 		    console.log('createReadStream', data);
-		    if (data === undefined) {
-			return null;
-		    } else {
-			let db = JSON.parse(data);
-			const stream = StreamArray.create(db);
+		//    if (data === undefined) {
+		//	return null;
+		  //  } else {
+			let db = [];//JSON.parse(data);
+			db['foo'] = 'bar';
+			db['qux'] = 'quxx';
+			const stream = StreamArray(db);
+
+			stream.on('data', function(value, key) {
+			    console.log(value); // hoge, fuga, piyo
+			    console.log(key);   // 0,    1,    2
+			});
+			
+			stream.on('end', function() { // emitted at the end of iteration
+			    console.log('end');
+			});
+			
+			stream.on('error', function(e) { // emitted when an error occurred
+			    console.log(e);
+			});
+
 			return stream;
-		    }
+		    //}
 		}
 	    });
 	},

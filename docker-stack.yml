@@ -17,7 +17,7 @@ services:
       S3METADATAPATH: /metadata
       MEMCACHED_HOST: memcached
       LISTEN_ADDR: 0.0.0.0
-    command: npm start
+    command: /usr/bin/supervisord -c /etc/supervisor/supervisord.conf -n -e DEBUG
     deploy:
       placement:
         constraints:
