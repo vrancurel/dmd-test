@@ -26,7 +26,9 @@ surprised.
 Data modules are supposed to manage the low level blob storage. There
 is no metadata available here such as the file name, parent folder or
 any other attributes that would be useful, so it is impossible to
-rattach it whatsoever to a bucket name. Please see this interface more
+rattach it whatsoever to a bucket name (if you need such info you might
+consider writing a backend directly in S3/CloudServer: https://github.com/scality/S3/tree/master/lib/data/external). 
+Please see this low level blob storage interface more
 as a disk interface where you create a key, store a blob, return a key
 to it (some blob store would dictate the key to use so it is fine
 also, just return it). Few other operations are required such as stat
