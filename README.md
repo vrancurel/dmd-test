@@ -39,8 +39,8 @@ module would stream to the backend.
 
 This example module also demonstrates the usage of docker-stack.yml and
 the user of the powerful docker networks: 
-Warning there shall be at least 2 nodes in the swarm for the networks
-to work. Otherwise the docker networks won't work properly.
+**Warning there shall be at least 2 nodes in the swarm for the networks
+to work. Otherwise the docker networks won't work properly.**
 Also don't forget to set the 'storage' label for container affinity with
 the actual real backend if necessary (in our case to be on the same
 node as memcached, in another context it would be for a specific
