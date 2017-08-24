@@ -3,7 +3,7 @@
 const arsenal = require('arsenal');
 const werelogs = require('werelogs');
 const Memcached = require('memcached');
-const StreamArray = require('stream-array');
+const Readable = require('readable-stream').Readable;
 
 const SUBLEVEL_SEP = '::';
 const MEMCACHED_LIFETIME = 100000;
@@ -44,6 +44,28 @@ class MemcachedService extends arsenal.network.rpc.BaseService {
 	});
     }
 }
+
+function DbStream(db) {
+    Readable.call(this, {objectMode:true});
+    this._db = db;
+    this._keys = Object.keys(db);
+    this._length = this._keys.length;
+    this._counter = 0;
+}
+
+DbStream.prototype = Object.create(Readable.prototype, {constructor: {value: DbStream}});
+
+DbStream.prototype._read = function(size) {
+    
+    if (this._counter < this._length) {
+	let key = this._keys[this._counter];
+	let value = this._db[this._keys[this._counter]];
+	this.push({ key: key, value: value });
+	this._counter++;
+    } else {
+	this.push(null);
+    }
+};
 
 mdServer.initMetadataService = function ()
 {
@@ -97,13 +119,19 @@ mdServer.initMetadataService = function ()
 	    const dbName = env.subLevel.join(SUBLEVEL_SEP);
 	    console.log('get', dbName, key, options);
 	    memcached.get(dbName, (err, data) => {
+		console.log('__', err, data);
 		if (err) {
 		    console.log(err);
 		    cb(err);
 		} else {
 		    console.log('get', data);
 		    let db = JSON.parse(data);
-		    cb(null, db[key])
+		    if (db[key] === undefined) {
+			console.log('returning not found');
+			cb(arsenal.errors.ObjNotFound);
+		    } else {
+			cb(null, db[key])
+		    }
 		}
 	    });
         },
@@ -122,29 +150,13 @@ mdServer.initMetadataService = function ()
 		    return undefined;
 		} else {
 		    console.log('createReadStream', data);
-		//    if (data === undefined) {
-		//	return null;
-		  //  } else {
-			let db = [];//JSON.parse(data);
-			db['foo'] = 'bar';
-			db['qux'] = 'quxx';
-			const stream = StreamArray(db);
-
-			stream.on('data', function(value, key) {
-			    console.log(value); // hoge, fuga, piyo
-			    console.log(key);   // 0,    1,    2
-			});
-			
-			stream.on('end', function() { // emitted at the end of iteration
-			    console.log('end');
-			});
-			
-			stream.on('error', function(e) { // emitted when an error occurred
-			    console.log(e);
-			});
-
+		    if (data === undefined) {
+			return null;
+		    } else {
+			let db = JSON.parse(data);
+			const stream = new DbStream(db);
 			return stream;
-		    //}
+		    }
 		}
 	    });
 	},
