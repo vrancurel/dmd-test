@@ -18,6 +18,10 @@ that if the container is restarted those DBs will be lost. The proper
 way would have been probably to write a jsonmemcachedmemdown module
 that would have fetched the JSON blobs from memcached (see jsondown
 sources).
+There are 2 special buckets: \_\_metastore and users..bucket which respectively
+maintain the list of all buckets and the list of buckets per user.
+Interaction with those 2 is also done by the MD interface so don't be
+surprised.
 
 Data modules are supposed to manage the low level blob storage. There
 is no metadata available here such as the file name, parent folder or
