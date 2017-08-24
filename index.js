@@ -3,7 +3,11 @@
 const arsenal = require('arsenal');
 const werelogs = require('werelogs');
 const Memcached = require('memcached');
-const Readable = require('readable-stream').Readable;
+const levelup = require('levelup');
+const jsondown = require('jsondown');
+const toString = require('stream-to-string');
+const toStream = require('string-to-stream');
+const crypto = require('crypto');
 
 const SUBLEVEL_SEP = '::';
 const MEMCACHED_LIFETIME = 100000;
@@ -45,27 +49,7 @@ class MemcachedService extends arsenal.network.rpc.BaseService {
     }
 }
 
-function DbStream(db) {
-    Readable.call(this, {objectMode:true});
-    this._db = db;
-    this._keys = Object.keys(db);
-    this._length = this._keys.length;
-    this._counter = 0;
-}
-
-DbStream.prototype = Object.create(Readable.prototype, {constructor: {value: DbStream}});
-
-DbStream.prototype._read = function(size) {
-    
-    if (this._counter < this._length) {
-	let key = this._keys[this._counter];
-	let value = this._db[this._keys[this._counter]];
-	this.push({ key: key, value: value });
-	this._counter++;
-    } else {
-	this.push(null);
-    }
-};
+var dbs = {};
 
 mdServer.initMetadataService = function ()
 {
@@ -79,60 +63,37 @@ mdServer.initMetadataService = function ()
         put: (env, key, value, options, cb) => {
 	    const dbName = env.subLevel.join(SUBLEVEL_SEP);
 	    console.log('put', dbName, key, value, options);
-	    memcached.get(dbName, (err, data) => {
-		if (err) {
-		    console.log(err);
-		    cb(err);
-		} else if (data === undefined) {
-		    let db = {};
-		    db[key] = value;
-		    memcached.add(dbName, JSON.stringify(db), MEMCACHED_LIFETIME, 
-				  (err) => {
-				      if (err) {
-					  console.log(err);
-					  cb(err);
-				      } else {
-					  cb(null);
-				      }
-				  });
-		} else {
-		    console.log(data);
-		    let db = JSON.parse(data);
-		    db[key] = value;
-		    memcached.replace(dbName, JSON.stringify(db), MEMCACHED_LIFETIME, 
-				      (err) => {
-					  if (err) {
-					      console.log(err);
-					      cb(err);
-					  } else {
-					      cb(null);
-					  }
-				      });
-		}
-	    });
+	    if (dbs[dbName] === undefined) {
+		dbs[dbName] = levelup('/tmp/' + dbName + '.json', { db: jsondown });
+	    }
+	    dbs[dbName].put(key, value);
+	    cb(null);
         },
         del: (env, key, options, cb) => {
 	    const dbName = env.subLevel.join(SUBLEVEL_SEP);
 	    console.log('del', dbName, key, options);
+	    if (dbs[dbName] === undefined) {
+		dbs[dbName] = levelup('/tmp/' + dbName + '.json', { db: jsondown });
+	    }
+	    dbs[dbName].del(key);
+	    cb(null);
         },
         get: (env, key, options, cb) => {
 	    const dbName = env.subLevel.join(SUBLEVEL_SEP);
 	    console.log('get', dbName, key, options);
-	    memcached.get(dbName, (err, data) => {
-		console.log('__', err, data);
+	    if (dbs[dbName] === undefined) {
+		console.log(dbName, 'undefined');
+		dbs[dbName] = levelup('/tmp/' + dbName + '.json', { db: jsondown });
+	    }
+	    dbs[dbName].get(key, (err, value) => {
 		if (err) {
-		    console.log(err);
-		    cb(err);
-		} else {
-		    console.log('get', data);
-		    let db = JSON.parse(data);
-		    if (db[key] === undefined) {
-			console.log('returning not found');
-			cb(arsenal.errors.ObjNotFound);
-		    } else {
-			cb(null, db[key])
+		    if (err.notFound) {
+			return cb(arsenal.errors.ObjNotFound);
 		    }
+		    return cb(arsenal.errors.InternalError);
 		}
+		console.log(key, value);
+		cb(null, value);
 	    });
         },
 	getDiskUsage: (env, cb) => {
@@ -144,21 +105,10 @@ mdServer.initMetadataService = function ()
         (env, options) => {
 	    const dbName = env.subLevel.join(SUBLEVEL_SEP);
 	    console.log('createReadStream', dbName, options);
-	    memcached.get(dbName, (err, data) => {
-		if (err) {
-		    console.log(err);
-		    return undefined;
-		} else {
-		    console.log('createReadStream', data);
-		    if (data === undefined) {
-			return null;
-		    } else {
-			let db = JSON.parse(data);
-			const stream = new DbStream(db);
-			return stream;
-		    }
-		}
-	    });
+	    if (dbs[dbName] === undefined) {
+		dbs[dbName] = levelup('/tmp/' + dbName + '.json', { db: jsondown });
+	    }
+	    return dbs[dbName].createReadStream();
 	},
         getUUID: () => this.readUUID(),
     });
@@ -169,6 +119,11 @@ mdServer.initMetadataService = function ()
 mdServer.startServer();
 
 // data
+function randomValueHex(len) {
+    return crypto.randomBytes(Math.ceil(len / 2))
+        .toString('hex') // convert to hexadecimal format
+        .slice(0, len);   // return required number of characters
+}
 
 class MemcachedFileStore extends arsenal.storage.data.file.DataFileStore {
     constructor(dataConfig, logApi) {
@@ -176,28 +131,66 @@ class MemcachedFileStore extends arsenal.storage.data.file.DataFileStore {
 	console.log('filestore constructor');
     }
 
-    setup(callback) {
+    setup(cb) {
 	console.log('data setup');
-	callback(null);
+	cb(null);
     }
 
-    put(dataStream, size, log, callback) {
+    put(dataStream, size, log, cb) {
 	console.log('data put');
+	toString(dataStream, (err, data) => {
+	    const key = randomValueHex(20);
+	    memcached.set(key, data, MEMCACHED_LIFETIME,
+			  (err) => {
+			      if (err) {
+				  console.log(err);
+				  cb(err);
+			      } else {
+				  cb(null, key);
+			      }
+			  });
+	});
     }
 
-    stat(key, log, callback) {
+    stat(key, log, cb) {
 	console.log('data stat');
+	memcached.get(key, (err, data) => {
+	    if (err) {
+		console.log(err);
+		cb(err);
+	    } else {
+		console.log(key, data.length);
+		cb(null, { objectSize: data.length});
+	    }
+	});
+
     }
 
-    get(key, byteRange, log, callback) {
+    get(key, byteRange, log, cb) {
 	console.log('data get');
+	memcached.get(key, (err, data) => {
+	    if (err) {
+		console.log(err);
+		cb(err);
+	    } else {
+		cb(null, toStream(data));
+	    }
+	});
     }
 
-    delete(key, log, callback) {
+    delete(key, log, cb) {
 	console.log('data delete');
+	memcached.del(key, (err) => {
+	    if (err) {
+		console.log(err);
+		cb(err);
+	    } else {
+		cb(null);
+	    }
+	});
     }
 
-    getDiskUsage(callback) {
+    getDiskUsage(cb) {
 	console.log('data getDiskUsage');
     }
 }

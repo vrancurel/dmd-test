@@ -17,7 +17,7 @@ services:
       S3METADATAPATH: /metadata
       MEMCACHED_HOST: memcached
       LISTEN_ADDR: 0.0.0.0
-      DEBUG: socket.io*
+#      DEBUG: socket.io*
     volumes:
       - "s3-data:/data:rw"
       - "s3-metadata:/metadata:rw"

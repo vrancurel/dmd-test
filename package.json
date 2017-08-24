@@ -32,8 +32,13 @@
   },
   "dependencies": {
     "arsenal": "scality/Arsenal",
+    "crypto": "^1.0.1",
+    "jsondown": "^0.1.1",
+    "levelup": "^1.3.9",
     "memcached": "~2.2.2",
     "stream-array": "^1.1.2",
+    "stream-to-string": "^1.1.0",
+    "string-to-stream": "^1.1.0",
     "werelogs": "scality/werelogs"
   }
 }
