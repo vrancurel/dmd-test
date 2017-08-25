@@ -36,6 +36,7 @@ jsondown sources).
 Eventually, there are 2 special buckets: 
  * **`__metastore`**: maintains the list of all buckets
  * **`users..bucket`**: manitains the list of buckets per user
+ 
 Interaction with those 2 is also done via the metadata interface.
 
 ### Data modules
