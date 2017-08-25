@@ -57,7 +57,7 @@ A few other operations are required, such as `stat` and `get`. For these,
 you returned at `put`. 
  - WARNING: in our case, in the POC spirit, we convert streams to strings, which
 is very bad practice: a fully fledged data module is expected to stream the blob
-to the backend.
+to the backend for put and get operations.
 
 ## Deployment
 
